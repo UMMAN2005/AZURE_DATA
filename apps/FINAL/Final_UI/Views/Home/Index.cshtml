@@ -1,0 +1,194 @@
+﻿@inject IDataService DataService
+@inject IUserService UserService
+@inject IConfiguration Configuration
+@{
+  ViewData["Title"] = "Home Page";
+
+  var isDocker = Configuration.GetValue<bool>("IsDocker");
+
+  var apiEndpoint = Configuration.GetSection("APIEndpoint").Value!;
+
+  if (isDocker) {
+    apiEndpoint = Configuration.GetSection("StaticAPIEndpoint").Value!;
+  }
+
+  var orders = await DataService.GetOrders();
+  var ordersCount = orders?.Count;
+  var fixedOrdersCount = ordersCount ?? 0;
+  var ordersIntRange = fixedOrdersCount > 5 ? 5 : fixedOrdersCount;
+  var ordersRange = new Range(0, ordersIntRange);
+
+  var comments = await DataService.GetComments();
+  var commentsCount = comments?.Count;
+  var fixedCommentsCount = commentsCount ?? 0;
+  var commentsIntRange = fixedCommentsCount > 4 ? 4 : fixedCommentsCount;
+  var commentsRange = new Range(0, commentsIntRange);
+
+  var allUsers = await UserService.GetUsers();
+  var users = allUsers?.Where(u => u.Roles.Contains("Member")).ToList();
+
+  var usersCount = users?.Count ?? 0;
+
+  // Group users by nationality, calculate the percentage, and get the top 6 nationalities
+  var topNationalities = users?
+    .GroupBy(u => u.Nationality)
+    .Select(group => new {
+      Nationality = group.Key,
+      Count = group.Count(),
+      Percentage = (double)group.Count() / usersCount * 100
+    })
+    .OrderByDescending(g => g.Count)
+    .Take(6)
+    .ToList();
+
+  var orderStatistics = await DataService.GetOrderStatistics();
+}
+
+<div class="main-panel">
+  <div class="content-wrapper">
+    <div class="row">
+      <div class="col-lg-6 grid-margin stretch-card">
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title">Monthly Orders</h4>
+            <canvas id="lineChart" style="height:250px"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6 grid-margin stretch-card">
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title">Seasonal Users</h4>
+            <canvas id="barChart" style="height:230px"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4 grid-margin stretch-card">
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title">Orders Status</h4>
+            <canvas id="pieChart1" style="height:250px"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4 grid-margin stretch-card">
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title">Houses Status</h4>
+            <canvas id="doughnutChart" style="height:250px"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4 grid-margin stretch-card">
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title">Comments Status</h4>
+            <canvas id="pieChart2" style="height:250px"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-sm-4 grid-margin">
+        <div class="card">
+          <div class="card-body">
+            <h5>Pending Orders</h5>
+            <div class="row">
+              <div class="col-8 col-sm-12 col-xl-8 my-auto">
+                <div class="d-flex d-sm-block d-md-flex align-items-center">
+                  <h2 class="mb-0">$@orderStatistics[0].TotalPrice</h2>
+                </div>
+                <h6 class="text-muted font-weight-normal">@orderStatistics[0].Count</h6>
+              </div>
+              <div class="col-4 col-sm-12 col-xl-4 text-center text-xl-right">
+                <i class="icon-lg mdi mdi-cart text-primary ml-auto"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-4 grid-margin">
+        <div class="card">
+          <div class="card-body">
+            <h5>Accepted Orders</h5>
+            <div class="row">
+              <div class="col-8 col-sm-12 col-xl-8 my-auto">
+                <div class="d-flex d-sm-block d-md-flex align-items-center">
+                  <h2 class="mb-0">$@orderStatistics[1].TotalPrice</h2>
+                </div>
+                <h6 class="text-muted font-weight-normal">@orderStatistics[1].Count</h6>
+              </div>
+              <div class="col-4 col-sm-12 col-xl-4 text-center text-xl-right">
+                <i class="icon-lg mdi mdi-cart-outline text-success ml-auto"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-4 grid-margin">
+        <div class="card">
+          <div class="card-body">
+            <h5>Rejected Orders</h5>
+            <div class="row">
+              <div class="col-8 col-sm-12 col-xl-8 my-auto">
+                <div class="d-flex d-sm-block d-md-flex align-items-center">
+                  <h2 class="mb-0">$@orderStatistics[2].TotalPrice</h2>
+                </div>
+                <h6 class="text-muted font-weight-normal">@orderStatistics[2].Count</h6>
+              </div>
+              <div class="col-4 col-sm-12 col-xl-4 text-center text-xl-right">
+                <i class="icon-lg mdi mdi-cart-off text-danger ml-auto"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    @await Html.PartialAsync("_Orders", orders?[ordersRange])
+    @await Html.PartialAsync("_Comments", comments?[commentsRange])
+    <input id="temp-message" type="hidden" value='@TempData["Message"]'>
+    <input id="temp-type" type="hidden" value='@TempData["Type"]'>
+    <input id="api-url" type="hidden" value="@apiEndpoint">
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title">Top Countries by Members</h4>
+            <div class="row">
+              <div class="col-md-5">
+                <div class="table-responsive">
+                  <table class="table">
+                    <tbody>
+                      @if (topNationalities != null) {
+                        foreach (var nation in topNationalities) {
+                          <tr>
+                            <td>
+                              <i class="flag-icon flag-icon-@nation.Nationality?.ToLower()"></i>
+                            </td>
+                            <td>@(nation.Nationality ?? "N/A")</td>
+                            <td class="text-right"> @nation.Count </td>
+                            <td class="text-right font-weight-medium"> @nation.Percentage.ToString("#.00") </td>
+                          </tr>
+                        }
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="col-md-7">
+                <div id="audience-map" class="vector-map"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- content-wrapper ends -->
+    @await Html.PartialAsync("_Footer")
+  </div>
+</div>
+
+@section Scripts {
+  <script src="~/assets/js/custom/mytoast.js"></script>
+  <script src="~/assets/js/custom/chart.js"></script>
+}
